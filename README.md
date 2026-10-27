@@ -158,6 +158,114 @@ fun formatTime(instant: Instant?): String = instant?.let(formatter::format) ?: "
 println(formatTime(prayerTime.fajrInstant))
 ```
 
+## Using It in an Android App
+
+A typical setup: one client shared by your app, a `ViewModel` that loads data, and a Compose screen that shows it.
+
+### 1. Share one client
+
+`WaktuSolatClient` is safe to reuse. Create it once (or provide it with Hilt/Koin):
+
+```kotlin
+object Solat {
+    val client = WaktuSolatClient()
+}
+```
+
+### 2. Load data in a ViewModel
+
+```kotlin
+class PrayerTimesViewModel : ViewModel() {
+    var today by mutableStateOf<PrayerTime?>(null)
+        private set
+    var error by mutableStateOf<String?>(null)
+        private set
+
+    fun load(zone: String) {
+        viewModelScope.launch {
+            try {
+                error = null
+                today = Solat.client.getPrayerTimeByDate(zone, LocalDate.now())
+            } catch (e: WaktuSolatApiException) {
+                error = e.message
+            }
+        }
+    }
+}
+```
+
+Leaving the screen cancels `viewModelScope`, which also cancels any request still in flight.
+
+### 3. Show it in Compose
+
+```kotlin
+private val timeFormat = DateTimeFormatter.ofPattern("h:mm a")
+    .withZone(ZoneId.of("Asia/Kuala_Lumpur"))
+
+@Composable
+fun PrayerTimesScreen(viewModel: PrayerTimesViewModel = viewModel()) {
+    LaunchedEffect(Unit) { viewModel.load("SGR01") }
+
+    viewModel.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+    viewModel.today?.let { pt ->
+        Column {
+            listOf(
+                "Imsak" to pt.imsakInstant,
+                "Subuh" to pt.fajrInstant,
+                "Syuruk" to pt.syurukInstant,
+                "Isyraq" to pt.isyraqInstant,
+                "Zohor" to pt.dhuhrInstant,
+                "Asar" to pt.asrInstant,
+                "Maghrib" to pt.maghribInstant,
+                "Isyak" to pt.ishaInstant,
+            ).forEach { (name, time) ->
+                Text("$name: ${time?.let(timeFormat::format) ?: "--:--"}")
+            }
+        }
+    }
+}
+```
+
+### 4. Prayer times for the user's location
+
+Ask for `ACCESS_COARSE_LOCATION` (city-level accuracy is enough to pick a zone), then pass the coordinates:
+
+```xml
+<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+```
+
+```kotlin
+val today = client.getPrayerTimeByDateGps(location.latitude, location.longitude, LocalDate.now())
+```
+
+The API only covers Malaysia. Coordinates outside Malaysia throw `WaktuSolatApiException` with `statusCode == 422` ("No zone found for the given coordinates").
+
+### 5. Let users pick a zone
+
+```kotlin
+val zones = client.getZones()   // JHR01 … WLY02, with negeri and daerah
+val states = client.getStates() // zones grouped by state, for a two-level picker
+```
+
+The zone list rarely changes, so you can cache it (in memory, DataStore or Room) instead of fetching it every launch.
+
+### 6. Cache a month at a time
+
+`getPrayerTimesByZone(zone, year, month)` returns a whole month in one request. To work offline and avoid a request each day, save the `SolatV2` result and look up days locally:
+
+```kotlin
+val month = client.getPrayerTimesByZone("SGR01", year = 2026, month = 3)
+val day15 = month.prayerTime.firstOrNull { it.day == 15 }
+```
+
+### Calling from Java
+
+The API uses Kotlin `suspend` functions, so Java callers need a coroutine bridge, e.g. `kotlinx-coroutines-jdk8`'s `future { client.getZones() }` from a small Kotlin helper.
+
+### R8 / ProGuard
+
+No extra rules are needed. The library doesn't use reflection, and OkHttp and kotlinx-serialization ship their own consumer rules.
+
 ## Error Handling
 
 All failures (HTTP errors, network errors, unexpected JSON) throw `WaktuSolatApiException`:
