@@ -316,6 +316,12 @@ cd example && ./gradlew :app:installDebug
 2. Tag and push: `git tag 1.0.0 && git push origin 1.0.0`.
 3. Open [jitpack.io/#apkdmg/waktu_solat_android](https://jitpack.io/#apkdmg/waktu_solat_android) and click **Get it** on the tag to trigger the first build.
 
+## Credits
+
+This library uses the [Malaysia Prayer Time API](https://api.waktusolat.app/docs) created by [Muhammad Fareez Iqmal](https://iqfareez.com/about), a Software Engineer specializing in Flutter, Laravel, and .NET technologies. The API provides accurate prayer times data for all locations in Malaysia.
+
+The data is collected from [e-solat JAKIM](https://www.e-solat.gov.my/) and stored in a database to maintain stability and availability. For more technical information, visit the API repository at [https://github.com/mptwaktusolat/api-waktusolat](https://github.com/mptwaktusolat/api-waktusolat).
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
